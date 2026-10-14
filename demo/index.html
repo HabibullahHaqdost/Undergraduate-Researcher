@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crypto Bench: AES vs RSA vs ECC in your browser</title>
+<meta name="description" content="Measure AES-GCM, RSA and elliptic-curve cryptography performance in your own browser with the Web Crypto API.">
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1b1d21; --muted: #5d636d; --line: #e3e3df;
+    --accent: #c4561a; --accent-soft: #fbe9dd; --good: #2f7a4b; --code: #f1f1ee;
+    --sym: #c4561a; --asym: #3a5fa8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141518; --panel: #1c1e22; --text: #ecebe8; --muted: #a2a7b0; --line: #2d3036;
+      --accent: #f08a4b; --accent-soft: #3a2619; --good: #6cc48f; --code: #23262b;
+      --sym: #f08a4b; --asym: #7d9be0; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 64px; }
+  header p { color: var(--muted); max-width: 680px; margin: 6px 0 0; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--accent); }
+  h2 { font-size: 1.15rem; margin: 0 0 4px; }
+  .eyebrow { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent); font-weight: 600; margin-bottom: 8px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-top: 22px; }
+  .sub { color: var(--muted); margin: 0 0 16px; font-size: .93rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 9px; padding: 10px 18px; cursor: pointer;
+    background: var(--accent); color: #fff; }
+  button:disabled { opacity: .55; cursor: progress; }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  select, textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  .status { color: var(--muted); font-size: .9rem; }
+  .table-wrap { overflow-x: auto; margin-top: 16px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .92rem; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; }
+  th.num { text-align: right; }
+  .tag { display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 99px; }
+  .tag.sym { background: color-mix(in srgb, var(--sym) 16%, transparent); color: var(--sym); }
+  .tag.asym { background: color-mix(in srgb, var(--asym) 18%, transparent); color: var(--asym); }
+  .bars { margin-top: 18px; display: grid; gap: 8px; }
+  .bar { display: grid; grid-template-columns: 170px 1fr 92px; gap: 10px; align-items: center; font-size: .88rem; }
+  .bar .track { background: var(--code); border-radius: 6px; height: 14px; overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 6px; }
+  .bar .v { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  pre { background: var(--code); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: .82rem; margin: 10px 0 0; white-space: pre-wrap; word-break: break-all; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .note { font-size: .85rem; color: var(--muted); margin-top: 14px; }
+  footer { margin-top: 28px; font-size: .85rem; color: var(--muted); }
+  footer a { color: var(--accent); }
+  @media (max-width: 640px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .bar { grid-template-columns: 110px 1fr 74px; }
+    h1 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Companion demo · Undergraduate research project</div>
+    <h1>AES vs RSA vs ECC, <span>measured in your browser</span></h1>
+    <p>This page runs real cryptographic operations with the browser's built-in Web Crypto API and times them on your device, turning the qualitative comparison in the research into numbers you can reproduce.</p>
+  </header>
+
+  <section>
+    <h2>1. Run the benchmark</h2>
+    <p class="sub">Each operation is repeated several times and averaged. Nothing leaves your device.</p>
+    <div class="row">
+      <label for="size">AES data size</label>
+      <select id="size">
+        <option value="1">1 MB</option>
+        <option value="8" selected>8 MB</option>
+        <option value="32">32 MB</option>
+      </select>
+      <button id="run">Run benchmark</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Operation</th><th>Type</th><th>Key size</th><th class="num">Avg time</th><th class="num">Rate</th></tr></thead>
+        <tbody id="results"><tr><td colspan="5" class="status">Results appear here after you run the benchmark.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="bars" id="bars"></div>
+    <p class="note" id="env"></p>
+  </section>
+
+  <section>
+    <h2>2. Hybrid encryption, step by step</h2>
+    <p class="sub">The research concludes that modern systems combine both families. This is how: ECDH (asymmetric) agrees on a shared secret, then AES-GCM (symmetric) encrypts the actual message. TLS 1.3 works the same way.</p>
+    <textarea id="msg">Confidential: the quarterly report is attached.</textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="hybrid">Encrypt and decrypt</button>
+      <button class="ghost" id="tamper" disabled>Tamper with ciphertext</button>
+    </div>
+    <pre id="hyout">Output appears here.</pre>
+  </section>
+
+  <section>
+    <h2>3. What the numbers mean</h2>
+    <div class="grid2">
+      <div>
+        <p><span class="tag sym">Symmetric</span> AES-GCM is measured in megabytes per second, not operations: it encrypts bulk data quickly, and most modern CPUs accelerate it in hardware (AES-NI). This is why AES protects files, disks and network traffic.</p>
+      </div>
+      <div>
+        <p><span class="tag asym">Asymmetric</span> RSA and ECC operations are measured per operation, not per megabyte. They are used only for small values: exchanging keys and signing. RSA's public-key operations (encrypt, verify) are fast, but its private-key operations and key generation are slow. ECC reaches RSA-3072 security with a 256-bit key and generates keys thousands of times faster.</p>
+      </div>
+    </div>
+    <p class="note">DES and 3DES are not available in Web Crypto because browsers no longer support obsolete ciphers, which matches the research's conclusion that they should not be used in new systems.</p>
+  </section>
+
+  <footer>
+    Part of <em>The Role of Cryptography in Information Security: A Comparative Study of Cryptographic Algorithms</em> by Habibullah Haqdost, Islamic Azad University, Mashhad.
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+const S = crypto.subtle;
+
+function fillRandom(buf) {
+  for (let i = 0; i < buf.length; i += 65536) crypto.getRandomValues(buf.subarray(i, Math.min(i + 65536, buf.length)));
+  return buf;
+}
+async function time(fn, runs) {
+  await fn(); // warm-up
+  const t0 = performance.now();
+  for (let i = 0; i < runs; i++) await fn();
+  return (performance.now() - t0) / runs;
+}
+const fmtMs = (ms) => ms < 1 ? ms.toFixed(3) + ' ms' : ms < 100 ? ms.toFixed(2) + ' ms' : ms.toFixed(0) + ' ms';
+const fmtOps = (ms) => { const o = 1000 / ms; return (o >= 100 ? Math.round(o).toLocaleString() : o.toFixed(1)) + " ops/s"; };
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+
+async function benchmark(mb) {
+  const rows = [];
+  const add = (op, type, key, ms, extra) => rows.push({ op, type, key, ms, extra });
+  const status = (t) => { $('status').textContent = t; };
+
+  // AES-GCM bulk throughput
+  status('AES-GCM…');
+  const data = fillRandom(new Uint8Array(mb * 1024 * 1024));
+  const aes = await S.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  let ct;
+  const encMs = await time(async () => { ct = await S.encrypt({ name: 'AES-GCM', iv }, aes, data); }, 3);
+  const decMs = await time(() => S.decrypt({ name: 'AES-GCM', iv }, aes, ct), 3);
+  add(`AES-GCM encrypt ${mb} MB`, 'sym', '256-bit', encMs, (mb / (encMs / 1000)).toFixed(0) + ' MB/s');
+  add(`AES-GCM decrypt ${mb} MB`, 'sym', '256-bit', decMs, (mb / (decMs / 1000)).toFixed(0) + ' MB/s');
+
+  // Key generation
+  status('RSA key generation (slow)…');
+  const rsaOaepParams = { name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' };
+  const rsaKg = await time(() => S.generateKey(rsaOaepParams, false, ['encrypt', 'decrypt']), 3);
+  add('Key pair generation', 'asym', 'RSA-2048', rsaKg);
+  const rsa3Kg = await time(() => S.generateKey({ ...rsaOaepParams, modulusLength: 3072 }, false, ['encrypt', 'decrypt']), 2);
+  add('Key pair generation', 'asym', 'RSA-3072', rsa3Kg);
+  status('ECC key generation…');
+  const ecKg = await time(() => S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']), 20);
+  add('Key pair generation', 'asym', 'ECC P-256', ecKg);
+
+  // RSA-OAEP encrypt/decrypt of a 32-byte session key
+  status('RSA encryption…');
+  const rsa = await S.generateKey(rsaOaepParams, false, ['encrypt', 'decrypt']);
+  const sessionKey = crypto.getRandomValues(new Uint8Array(32));
+  let wrapped;
+  const rsaEnc = await time(async () => { wrapped = await S.encrypt({ name: 'RSA-OAEP' }, rsa.publicKey, sessionKey); }, 50);
+  const rsaDec = await time(() => S.decrypt({ name: 'RSA-OAEP' }, rsa.privateKey, wrapped), 20);
+  add('Encrypt 32-byte key (OAEP)', 'asym', 'RSA-2048', rsaEnc);
+  add('Decrypt 32-byte key (OAEP)', 'asym', 'RSA-2048', rsaDec);
+
+  // ECDH key agreement
+  status('ECDH key agreement…');
+  const a = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const b = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+  const ecdh = await time(() => S.deriveBits({ name: 'ECDH', public: b.publicKey }, a.privateKey, 256), 50);
+  add('Key agreement (ECDH)', 'asym', 'ECC P-256', ecdh);
+
+  // Signatures
+  status('Digital signatures…');
+  const msg = enc.encode('The quick brown fox jumps over the lazy dog');
+  const pss = await S.generateKey({ name: 'RSA-PSS', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, false, ['sign', 'verify']);
+  let sig;
+  const pssSign = await time(async () => { sig = await S.sign({ name: 'RSA-PSS', saltLength: 32 }, pss.privateKey, msg); }, 20);
+  const pssVer = await time(() => S.verify({ name: 'RSA-PSS', saltLength: 32 }, pss.publicKey, sig, msg), 50);
+  const ecd = await S.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
+  let esig;
+  const ecSign = await time(async () => { esig = await S.sign({ name: 'ECDSA', hash: 'SHA-256' }, ecd.privateKey, msg); }, 50);
+  const ecVer = await time(() => S.verify({ name: 'ECDSA', hash: 'SHA-256' }, ecd.publicKey, esig, msg), 50);
+  add('Sign (RSA-PSS)', 'asym', 'RSA-2048', pssSign);
+  add('Verify (RSA-PSS)', 'asym', 'RSA-2048', pssVer);
+  add('Sign (ECDSA)', 'asym', 'ECC P-256', ecSign);
+  add('Verify (ECDSA)', 'asym', 'ECC P-256', ecVer);
+
+  status('');
+  return rows;
+}
+
+function render(rows) {
+  $('results').innerHTML = rows.map(r => `
+    <tr><td>${r.op}</td>
+    <td><span class="tag ${r.type}">${r.type === 'sym' ? 'Symmetric' : 'Asymmetric'}</span></td>
+    <td>${r.key}</td>
+    <td class="num">${fmtMs(r.ms)}</td>
+    <td class="num">${r.extra || fmtOps(r.ms)}</td></tr>`).join('');
+
+  const kg = rows.filter(r => r.op === 'Key pair generation');
+  const max = Math.max(...kg.map(r => r.ms));
+  $('bars').innerHTML = '<div class="status">Key pair generation time (shorter is faster)</div>' + kg.map(r => `
+    <div class="bar"><div>${r.key}</div>
+    <div class="track"><div class="fill" style="width:${Math.max(1, r.ms / max * 100)}%;background:var(--asym)"></div></div>
+    <div class="v">${fmtMs(r.ms)}</div></div>`).join('');
+  $('env').textContent = 'Measured on: ' + navigator.userAgent + '. Results vary by device and browser.';
+  window.__results = rows;
+}
+
+$('run').addEventListener('click', async () => {
+  $('run').disabled = true;
+  try { render(await benchmark(+$('size').value)); }
+  catch (e) { $('status').textContent = 'Error: ' + e.message; }
+  finally { $('run').disabled = false; }
+});
+
+// Hybrid encryption demo
+let last = null;
+$('hybrid').addEventListener('click', async () => {
+  const out = [];
+  const alice = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+  const bob = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+  out.push('1. Alice and Bob each generate an ECC P-256 key pair and exchange public keys.');
+  const aliceKey = await S.deriveKey({ name: 'ECDH', public: bob.publicKey }, alice.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  const bobKey = await S.deriveKey({ name: 'ECDH', public: alice.publicKey }, bob.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  out.push('2. Each side derives the same 256-bit AES key with ECDH. The key itself is never sent.');
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await S.encrypt({ name: 'AES-GCM', iv }, aliceKey, enc.encode($('msg').value));
+  out.push('3. Alice encrypts the message with AES-GCM:\n   ' + b64(ct));
+  const pt = await S.decrypt({ name: 'AES-GCM', iv }, bobKey, ct);
+  out.push('4. Bob decrypts it with his copy of the key:\n   "' + dec.decode(pt) + '"');
+  last = { bobKey, iv, ct };
+  $('tamper').disabled = false;
+  $('hyout').textContent = out.join('\n\n');
+});
+$('tamper').addEventListener('click', async () => {
+  if (!last) return;
+  const bad = new Uint8Array(last.ct.slice(0));
+  bad[0] ^= 1;
+  try {
+    await S.decrypt({ name: 'AES-GCM', iv: last.iv }, last.bobKey, bad);
+    $('hyout').textContent += '\n\n5. Tampered ciphertext was accepted (unexpected).';
+  } catch {
+    $('hyout').textContent += '\n\n5. One bit of the ciphertext was flipped. Decryption failed: AES-GCM detected the tampering (integrity, the "I" in the CIA triad).';
+  }
+});
+</script>
+</body>
+</html>
